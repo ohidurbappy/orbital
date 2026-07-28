@@ -1,9 +1,9 @@
 name: Release
 
-# Every push to main cuts a release. The version is derived from build.zig.zon
+# Every push to main cuts a release. The version is derived from package.json
 # (MAJOR.MINOR) with the workflow run number as the patch, so each release is a
 # strictly-increasing semver without anyone bumping a file by hand. Bump
-# MAJOR/MINOR by editing the `version` field in build.zig.zon.
+# MAJOR/MINOR by editing the `version` field in package.json.
 on:
   push:
     branches:
@@ -17,93 +17,44 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-env:
-  ZIG_VERSION: 0.16.0
-
 jobs:
-  # Darwin targets must build on a macOS runner: the binary @cImports system
-  # headers (ifaddrs.h, sysctl) that need the macOS SDK. One macOS runner
-  # cross-compiles both arm64 and x64.
-  build-darwin:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: ${{ env.ZIG_VERSION }}
-      - name: Compute version
-        id: version
-        run: |
-          base="$(grep -m1 '\.version' build.zig.zon | sed -E 's/.*"([0-9]+\.[0-9]+)\.[0-9]+".*/\1/')"
-          echo "full=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-      - run: zig build test -Dversion=${{ steps.version.outputs.full }}
-      - name: Build darwin binaries
-        run: |
-          mkdir -p dist
-          for pair in "aarch64-macos:orb-darwin-arm64" "x86_64-macos:orb-darwin-x64"; do
-            target="${pair%%:*}"; out="${pair##*:}"
-            zig build -Dtarget="$target" -Doptimize=ReleaseSafe -Dversion=${{ steps.version.outputs.full }}
-            gzip -9 -c zig-out/bin/orb > "dist/${out}.gz"
-          done
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-darwin
-          path: dist/*.gz
-
-  # Linux (musl, static) and Windows cross-compile cleanly from a Linux runner
-  # using Zig's bundled libc.
-  build-cross:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: ${{ env.ZIG_VERSION }}
-      - name: Compute version
-        id: version
-        run: |
-          base="$(grep -m1 '\.version' build.zig.zon | sed -E 's/.*"([0-9]+\.[0-9]+)\.[0-9]+".*/\1/')"
-          echo "full=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-      - run: zig build test -Dversion=${{ steps.version.outputs.full }}
-      - name: Build linux + windows binaries
-        run: |
-          mkdir -p dist
-          # target:asset-name:binary-name
-          for spec in \
-            "x86_64-linux-musl:orb-linux-x64:orb" \
-            "aarch64-linux-musl:orb-linux-arm64:orb" \
-            "x86_64-windows:orb-windows-x64.exe:orb.exe"; do
-            target="$(echo "$spec" | cut -d: -f1)"
-            out="$(echo "$spec" | cut -d: -f2)"
-            bin="$(echo "$spec" | cut -d: -f3)"
-            zig build -Dtarget="$target" -Doptimize=ReleaseSafe -Dversion=${{ steps.version.outputs.full }}
-            gzip -9 -c "zig-out/bin/${bin}" > "dist/${out}.gz"
-          done
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-cross
-          path: dist/*.gz
-
   release:
-    needs: [build-darwin, build-cross]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      # Sanity-gate the release on green tests + types.
+      - run: bun run typecheck
+      - run: bun test
+
+      # package.json holds MAJOR.MINOR(.PATCH); patch is replaced by the run
+      # number. The binary inlines package.json at build time (src/core/version.ts),
+      # so the compiled version always matches the release tag.
       - name: Compute version
         id: version
         run: |
-          base="$(grep -m1 '\.version' build.zig.zon | sed -E 's/.*"([0-9]+\.[0-9]+)\.[0-9]+".*/\1/')"
-          echo "full=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      - name: Collect + checksum assets
-        run: |
-          mkdir -p dist
-          mv artifacts/dist-*/*.gz dist/
-          cd dist
-          sha256sum *.gz > checksums.txt
-          ls -la
+          base="$(jq -r .version package.json)"
+          major_minor="$(echo "$base" | cut -d. -f1,2)"
+          full="${major_minor}.${GITHUB_RUN_NUMBER}"
+          jq --arg v "$full" '.version = $v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$full"
+
+      # Bun cross-compiles every target from this one Linux runner and gzips
+      # each binary (see scripts/build.ts).
+      - name: Build all targets
+        run: bun run build
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum *.gz > checksums.txt
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

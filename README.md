@@ -1,8 +1,7 @@
 # orb
 
 A growable, cross-platform CLI toolbox — an aggregate of small tools that share one
-binary, one update mechanism, and one consistent UI. Written in [Zig](https://ziglang.org),
-it compiles to a single dependency-free native executable per platform.
+binary, one update mechanism, and one consistent UI (built with [Ink](https://github.com/vadimdemedes/ink)).
 
 ## Install
 
@@ -70,30 +69,28 @@ binary. Checks are cached at `~/.config/orb/state.json` and never block a comman
 
 ## Development
 
-Requires [Zig](https://ziglang.org) 0.16.
+Requires [Bun](https://bun.sh) ≥ 1.3.
 
 ```sh
-zig build run -- ip        # run the CLI from source (args after `--`)
-zig build test             # run the test suite
-zig build                  # build a debug binary into zig-out/bin/orb
-zig build -Doptimize=ReleaseSafe              # optimized native build
-zig build -Dtarget=x86_64-linux-musl          # cross-compile a single target
+bun install
+bun run dev          # run the CLI from source
+bun test             # run the test suite
+bun run typecheck    # tsc --noEmit
+bun run build        # cross-compile all targets into dist/
+bun run build darwin-arm64   # build a single target
 ```
-
-Releases (`.github/workflows/release.yml`) cross-compile every target with
-`-Doptimize=ReleaseSafe`, gzip each binary, and publish the `.gz` assets.
 
 ## Adding a command
 
-Every tool lives in its own file and is registered in one place. To add `mytool`:
+Every tool lives in its own folder and is registered in one place. To add `mytool`:
 
-1. Create `src/commands/mytool.zig`:
-   - **pure logic**, with side-effecting dependencies passed as parameters (see
-     `ip.zig` / `sysinfo.zig`) so it's trivial to unit-test.
-   - a `render(ctx: *Ctx)` function — the thin presentation layer.
-   - optionally a `run(ctx: *Ctx) !?[]const u8` for plain-output one-shot use.
-2. Register a `Command` for it in `src/commands` / `src/registry.zig`.
-3. Add tests for the pure logic to `src/tests.zig`.
+1. Create `src/commands/mytool/`:
+   - `mytool.ts` — **pure logic**, with side-effecting dependencies passed as
+     parameters (see `ip.ts` / `sysinfo.ts`) so it's trivial to unit-test.
+   - `MytoolCommand.tsx` — a thin Ink component that renders the logic's output.
+   - `index.ts` — export a `Command` descriptor.
+   - `mytool.test.ts` / `MytoolCommand.test.tsx` — tests.
+2. Add it to the registry in `src/commands/index.ts`.
 
 It then automatically appears in `--help`, the interactive menu, and CLI dispatch.
 
