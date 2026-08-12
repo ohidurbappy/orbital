@@ -5,16 +5,30 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Typecheck
-        run: bun run typecheck
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      # Formatting and lints only need to be checked once.
+      - name: Format
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --check
+      - name: Clippy
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo clippy --all-targets -- -D warnings
+
       - name: Test
-        run: bun test
+        run: cargo test
