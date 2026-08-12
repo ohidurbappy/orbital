@@ -40,8 +40,8 @@ impl Ctx<'_> {
 
 /// Plain-text handler for one-shot, script-friendly invocations (e.g.
 /// `orbital ip --local`). Returning `Ok(Some(text))` prints it to stdout and
-/// skips the UI entirely — no menu chrome, no update banner — so the output is
-/// pipeable. `Ok(None)` falls through to `view`. `Err` is printed to stderr and
+/// skips the UI entirely — no menu chrome — so the output is pipeable.
+/// `Ok(None)` falls through to `view`. `Err` is printed to stderr and
 /// exits non-zero. Only consulted for one-shot CLI runs, never from the menu.
 pub type RunFn = fn(&Ctx) -> Result<Option<String>, String>;
 

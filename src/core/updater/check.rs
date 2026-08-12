@@ -2,11 +2,11 @@
 
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::core::version::{user_agent, REPO, VERSION};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ReleaseAsset {
     pub name: String,
     pub browser_download_url: String,
@@ -14,14 +14,11 @@ pub struct ReleaseAsset {
     pub size: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct UpdateResult {
     pub has_update: bool,
     pub current: String,
     pub latest: Option<String>,
-    /// Release page URL for the human.
-    pub url: Option<String>,
-    #[serde(default)]
     pub assets: Vec<ReleaseAsset>,
 }
 
@@ -32,7 +29,6 @@ impl UpdateResult {
             has_update: false,
             current: current.to_string(),
             latest: None,
-            url: None,
             assets: Vec::new(),
         }
     }
@@ -42,7 +38,6 @@ impl UpdateResult {
 #[derive(Debug, Deserialize)]
 struct Release {
     tag_name: Option<String>,
-    html_url: Option<String>,
     #[serde(default)]
     assets: Vec<ReleaseAsset>,
 }
@@ -84,7 +79,6 @@ pub fn parse_release(body: &str, current: &str) -> UpdateResult {
         has_update: latest > running,
         current: current.to_string(),
         latest: Some(latest.to_string()),
-        url: release.html_url,
         assets: release.assets,
     }
 }
@@ -130,7 +124,6 @@ mod tests {
         let res = parse_release(body, "1.0.0");
         assert!(res.has_update);
         assert_eq!(res.latest.as_deref(), Some("1.2.0"));
-        assert_eq!(res.url.as_deref(), Some("http://x"));
     }
 
     #[test]

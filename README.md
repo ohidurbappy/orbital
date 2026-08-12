@@ -68,9 +68,9 @@ orbital --version
 ```
 
 `orbital ip --local` (`-l`) and `--public` (`-p`) print a bare address with no UI
-chrome, so they're safe to capture in scripts. Colour — and the update banner — are
-dropped automatically when output isn't a terminal, so piping and redirecting only
-ever capture the command's own output. `NO_COLOR` disables colour too.
+chrome, so they're safe to capture in scripts. Colour is dropped automatically when
+output isn't a terminal, and when `NO_COLOR` is set, so piping and redirecting only
+ever capture the command's own output.
 
 ### table
 
@@ -88,10 +88,11 @@ orbital table --ascii                   # +--+ borders instead of box-drawing
 Without a delimiter flag, lines are split on runs of whitespace — the same rule
 `awk` uses, which is what makes the output of most Unix tools line up.
 
-orbital checks GitHub for a newer release on startup (and every 10 minutes while the
-menu is open). When one is found it shows a banner; run `orbital update` to
-self-replace the binary. Checks are cached at `~/.config/orbital/state.json`
-(`%APPDATA%\orbital\Config\state.json` on Windows) and never block a command.
+### Updating
+
+Run `orbital update` to check GitHub for a newer release and self-replace the
+binary. Nothing checks for updates in the background — no banners, no cache, and no
+network traffic unless you ask for it.
 
 ## Development
 

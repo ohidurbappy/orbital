@@ -13,10 +13,7 @@ mod term;
 use std::io::{IsTerminal, Read};
 
 use commands::{find_command, Ctx, Stdin, COMMANDS};
-use components::banner::banner_lines;
 use components::menu::run_menu;
-use core::updater::cached_update;
-use core::updater::refresh::{run_refresh, spawn_background_refresh, REFRESH_ARG};
 use core::version::{BIN, VERSION};
 
 /// The error type every fallible path funnels into.
@@ -97,13 +94,6 @@ fn main() {
 
 fn run() -> Res<i32> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
-
-    // Hidden command used by the detached background update check.
-    if argv.first().map(String::as_str) == Some(REFRESH_ARG) {
-        run_refresh();
-        return Ok(0);
-    }
-
     let parsed = parse_args(&argv);
 
     if parsed.version {
@@ -117,7 +107,7 @@ fn run() -> Res<i32> {
 
     let name = match &parsed.command_name {
         Some(name) => name,
-        // No command → the interactive menu, which runs its own update poll.
+        // No command → the interactive menu.
         None => {
             run_menu()?;
             return Ok(0);
@@ -156,12 +146,11 @@ fn run() -> Res<i32> {
     };
 
     // Plain-output handler (e.g. `orbital ip --local`): print to stdout and skip
-    // the UI entirely — no menu chrome, no update banner — so it stays pipeable.
+    // the UI entirely, so the output stays pipeable.
     if let Some(plain) = command.run {
         match plain(&ctx) {
             Ok(Some(out)) => {
                 println!("{out}");
-                spawn_background_refresh();
                 return Ok(0);
             }
             Ok(None) => {}
@@ -172,18 +161,7 @@ fn run() -> Res<i32> {
         }
     }
 
-    // The banner is chrome, not output: keep it out of pipes and files so
-    // `ps | orbital table > out.txt` captures only the table.
-    if term::stdout_is_tty() {
-        let banner = banner_lines(cached_update().as_ref());
-        if !banner.is_empty() {
-            term::emit(&banner);
-        }
-    }
     (command.view)(&ctx)?;
-
-    // Refresh the update cache for next time without blocking this run.
-    spawn_background_refresh();
     Ok(0)
 }
 

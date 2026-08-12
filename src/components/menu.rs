@@ -1,21 +1,10 @@
 //! The interactive tool picker: type to fuzzy-search, ↑/↓ to move, Enter to run.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-
 use crate::commands::filter::filter_commands;
 use crate::commands::{Command, Ctx, COMMANDS};
-use crate::components::banner::banner_lines;
-use crate::core::updater::cached_update;
-use crate::core::updater::refresh::run_refresh;
-use crate::core::updater::state::{is_stale, now_ms, read_state};
 use crate::style;
 use crate::term::{self, Frame, Key, RawMode};
 use crate::Res;
-
-/// How often the input loop wakes up to notice a finished update check.
-const TICK: Duration = Duration::from_millis(200);
 
 /// Width of the command-name column, matching the TypeScript menu.
 const NAME_WIDTH: usize = 12;
@@ -40,12 +29,7 @@ pub fn run_menu() -> Res {
     if !term::is_interactive() {
         // No TTY to prompt on: print what's available and leave, so
         // `orbital | cat` is still useful instead of hanging on a key read.
-        let mut lines = if term::stdout_is_tty() {
-            banner_lines(cached_update().as_ref())
-        } else {
-            Vec::new()
-        };
-        lines.push(style::bold_cyan("Available tools"));
+        let mut lines = vec![style::bold_cyan("Available tools")];
         for command in COMMANDS {
             lines.push(format!(
                 "  {}{}",
@@ -63,23 +47,15 @@ pub fn run_menu() -> Res {
         query: String::new(),
         selected: 0,
     };
-    // Guards against stacking up refresh threads while one is in flight.
-    let refreshing = Arc::new(AtomicBool::new(false));
 
     loop {
-        maybe_refresh(&refreshing);
         let results = filter_commands(COMMANDS, &state.query);
         let index = state.index(results.len());
         frame.draw(&render(&state, &results, index))?;
 
-        let key = match term::read_key_timeout(TICK)? {
-            Some(key) => key,
-            // Timed out: loop round to repaint, which is how a background
-            // update check makes its banner appear without a keypress.
-            None => continue,
-        };
-
-        match key {
+        // Nothing here changes on its own, so block until the user acts rather
+        // than waking on a timer and repainting a frame that already matches.
+        match term::read_key()? {
             Key::Interrupt => break,
             Key::Escape => {
                 if state.query.is_empty() {
@@ -147,22 +123,8 @@ fn open(command: &Command) -> Res {
     Ok(())
 }
 
-/// Kick off a cache refresh in the background when the cached check has aged
-/// out. Mirrors the 10-minute poll the TypeScript menu ran while open.
-fn maybe_refresh(refreshing: &Arc<AtomicBool>) {
-    if refreshing.load(Ordering::Relaxed) || !is_stale(read_state().as_ref(), now_ms()) {
-        return;
-    }
-    refreshing.store(true, Ordering::Relaxed);
-    let flag = Arc::clone(refreshing);
-    let _ = std::thread::Builder::new().spawn(move || {
-        run_refresh();
-        flag.store(false, Ordering::Relaxed);
-    });
-}
-
 fn render(state: &MenuState, results: &[&Command], index: usize) -> Vec<String> {
-    let mut lines = banner_lines(cached_update().as_ref());
+    let mut lines = Vec::new();
 
     let prompt = format!("{}{}", style::bold_cyan("❯ "), state.query);
     lines.push(if state.query.is_empty() {

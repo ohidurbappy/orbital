@@ -23,18 +23,17 @@ It is written in Rust and ships as one self-contained executable per platform.
 - **Rendering is separated from logic.** A view builds a `Vec<String>` of lines and
   hands it to `term::emit` (print once) or `term::Frame` (repaint in place). Render
   functions are pure so they can be asserted on directly. Shared pieces live in
-  `src/components/` (`banner`, `key_value`, `menu`).
+  `src/components/` (`key_value`, `menu`).
 - **Entry/dispatch:** `src/main.rs` parses argv, resolves the command, reads piped
-  stdin for commands that opt in, tries the plain-output `run` path, then prints the
-  update banner and calls `view`. With no command it opens the menu.
+  stdin for commands that opt in, tries the plain-output `run` path, then calls
+  `view`. With no command it opens the menu.
 - **Terminal:** `src/term.rs` owns raw mode (`RawMode` restores it on drop, and
   nests safely), key classification, and frame redrawing. `src/style.rs` owns ANSI
   colour, which turns itself off for non-terminals and `NO_COLOR`.
-- **Auto-update:** `src/core/updater/`. `check` queries GitHub releases; `state`
-  caches results (10-min throttle) under `paths::config_dir()`; the menu refreshes
-  on a background thread while it's open; one-shot commands fire a detached
-  background refresh (`refresh::spawn_background_refresh`) and never block on the
-  network; `apply` self-replaces the binary for `orbital update`.
+- **Update:** `src/core/updater/` runs only when the user asks. `orbital update`
+  calls `apply`, which checks GitHub via `check` and self-replaces the binary.
+  There is deliberately no background check, no cached state, and no banner —
+  nothing touches the network unless the user ran `update`.
 
 ## Conventions
 
@@ -45,9 +44,12 @@ It is written in Rust and ships as one self-contained executable per platform.
 - Interactive views must work when stdin/stdout aren't a terminal: check
   `Ctx::interactive` and fall back to printing a single frame (see `qr` and the
   menu), never block on a key read that can't come.
-- Only a command's own output goes to a pipe. Chrome (the update banner, colour)
-  is gated on `term::stdout_is_tty`, so `ps | orbital table > out.txt` captures
-  the table and nothing else.
+- Only a command's own output reaches stdout, so `ps | orbital table > out.txt`
+  captures the table and nothing else. Don't add banners or notices to it.
+- `term::Frame` must stay flicker-free: an unchanged frame writes nothing, and a
+  repaint overwrites rows in place (erase-to-end-of-line) instead of blanking the
+  block first. Interactive loops block on a key rather than waking on a timer to
+  repaint something that hasn't changed.
 - Commands declare how they want piped input with `Stdin`: `WhenNoArgs` when the
   arguments are the payload (`qr`), `Always` when they're options (`table`).
 - Asset names in `src/core/updater/assets.rs` must match the names produced by

@@ -6,21 +6,13 @@
 //! repaints over the previous frame instead of scrolling the terminal.
 
 use std::io::{self, IsTerminal, Write};
-use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::{cursor, queue, terminal};
 
-/// True when a human is watching stdout, rather than it being a pipe or file.
-/// Chrome that isn't part of a command's output — the update banner — is only
-/// worth drawing when this holds.
-pub fn stdout_is_tty() -> bool {
-    io::stdout().is_terminal()
-}
-
 /// True when we can both draw a UI and read keystrokes.
 pub fn is_interactive() -> bool {
-    io::stdin().is_terminal() && stdout_is_tty()
+    io::stdin().is_terminal() && io::stdout().is_terminal()
 }
 
 /// Enables raw mode for its lifetime and restores the terminal on drop —
@@ -97,18 +89,6 @@ pub fn read_key() -> io::Result<Key> {
     }
 }
 
-/// Like [`read_key`], but gives up after `timeout` so a caller can refresh
-/// itself on a timer. Returns `None` when nothing was pressed.
-pub fn read_key_timeout(timeout: Duration) -> io::Result<Option<Key>> {
-    if !event::poll(timeout)? {
-        return Ok(None);
-    }
-    match event::read()? {
-        Event::Key(key) if key.kind == KeyEventKind::Press => Ok(Some(classify(key))),
-        _ => Ok(None),
-    }
-}
-
 /// Raw mode swallows the implicit carriage return, so lines need `\r\n` there.
 fn newline() -> &'static str {
     if terminal::is_raw_mode_enabled().unwrap_or(false) {
@@ -118,54 +98,96 @@ fn newline() -> &'static str {
     }
 }
 
+/// Move the cursor to the start of the line `n` rows up.
+fn up(n: usize) -> String {
+    if n == 0 {
+        String::new()
+    } else {
+        format!("\x1b[{n}F")
+    }
+}
+
+/// Erase from the cursor to the end of the line.
+const CLEAR_TO_EOL: &str = "\x1b[K";
+
+/// Build the escape sequence that turns the `previous` frame into `next`.
+///
+/// Two properties keep the screen still, and both are what a naive
+/// "clear the block, print it again" loop gets wrong:
+///
+/// * an unchanged frame writes **nothing at all**, so a redraw that changes no
+///   pixels costs no flicker;
+/// * each row is overwritten in place and trimmed with an erase-to-end-of-line
+///   rather than the block being blanked first, so no row is ever empty between
+///   the clear and the reprint.
+fn repaint(previous: &[String], next: &[String], newline: &str) -> String {
+    if previous == next {
+        return String::new();
+    }
+
+    let mut out = up(previous.len());
+    for line in next {
+        out.push_str(line);
+        out.push_str(CLEAR_TO_EOL);
+        out.push_str(newline);
+    }
+
+    // A frame that shrank leaves rows below it; wipe them, then step back up so
+    // the cursor still sits directly under the frame.
+    let extra = previous.len().saturating_sub(next.len());
+    for _ in 0..extra {
+        out.push_str(CLEAR_TO_EOL);
+        out.push_str(newline);
+    }
+    out.push_str(&up(extra));
+
+    out
+}
+
 /// A block of lines that can be repainted in place.
 #[derive(Default)]
 pub struct Frame {
-    height: u16,
+    drawn: Vec<String>,
 }
 
 impl Frame {
     pub fn new() -> Self {
-        Self { height: 0 }
+        Self { drawn: Vec::new() }
     }
 
-    /// Repaint the frame with `lines`, erasing whatever was drawn before.
+    /// Repaint the frame with `lines`. A no-op when nothing changed.
     pub fn draw(&mut self, lines: &[String]) -> io::Result<()> {
-        let mut out = io::stdout().lock();
-        self.rewind(&mut out)?;
-        let newline = newline();
-        for line in lines {
-            write!(out, "{line}{newline}")?;
+        let update = repaint(&self.drawn, lines, newline());
+        if update.is_empty() {
+            return Ok(());
         }
+        let mut out = io::stdout().lock();
+        out.write_all(update.as_bytes())?;
         out.flush()?;
-        self.height = lines.len() as u16;
+        self.drawn = lines.to_vec();
         Ok(())
     }
 
     /// Erase the frame entirely, leaving the cursor where it started.
     pub fn clear(&mut self) -> io::Result<()> {
+        if self.drawn.is_empty() {
+            return Ok(());
+        }
         let mut out = io::stdout().lock();
-        self.rewind(&mut out)?;
+        queue!(
+            out,
+            cursor::MoveToPreviousLine(self.drawn.len() as u16),
+            terminal::Clear(terminal::ClearType::FromCursorDown)
+        )?;
         out.flush()?;
-        self.height = 0;
+        self.drawn.clear();
         Ok(())
     }
 
     /// Leave the current frame on screen and stop tracking it, so the next
     /// draw appends below instead of overwriting.
     pub fn keep(&mut self) {
-        self.height = 0;
-    }
-
-    fn rewind(&self, out: &mut impl Write) -> io::Result<()> {
-        if self.height > 0 {
-            queue!(
-                out,
-                cursor::MoveToPreviousLine(self.height),
-                terminal::Clear(terminal::ClearType::FromCursorDown)
-            )?;
-        }
-        Ok(())
+        self.drawn.clear();
     }
 }
 
@@ -222,6 +244,67 @@ mod tests {
             press(KeyCode::Char('Q'), KeyModifiers::SHIFT),
             Key::Char('Q')
         );
+    }
+
+    fn lines(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn an_unchanged_frame_writes_nothing() {
+        // The whole point: a redraw that would look identical must not touch
+        // the terminal, or the screen flickers at the redraw rate.
+        let frame = lines(&["a", "b"]);
+        assert_eq!(repaint(&frame, &frame, "\n"), "");
+    }
+
+    #[test]
+    fn the_first_draw_just_prints_the_lines() {
+        assert_eq!(
+            repaint(&[], &lines(&["a", "b"]), "\n"),
+            "a\x1b[K\nb\x1b[K\n"
+        );
+    }
+
+    #[test]
+    fn a_redraw_steps_back_over_the_previous_frame() {
+        let update = repaint(&lines(&["a", "b"]), &lines(&["c", "d"]), "\n");
+        assert_eq!(update, "\x1b[2Fc\x1b[K\nd\x1b[K\n");
+    }
+
+    #[test]
+    fn never_blanks_the_block_before_reprinting_it() {
+        // A full-screen erase is what makes a repaint visibly flash.
+        let update = repaint(&lines(&["a"]), &lines(&["b"]), "\n");
+        assert!(
+            !update.contains("\x1b[J"),
+            "erases below the cursor: {update:?}"
+        );
+    }
+
+    #[test]
+    fn a_shorter_frame_wipes_the_rows_it_gave_up() {
+        let update = repaint(&lines(&["a", "b", "c"]), &lines(&["x"]), "\n");
+        // One row printed, two wiped, then back up over the two wiped rows so
+        // the cursor still sits under the frame.
+        assert_eq!(update, "\x1b[3Fx\x1b[K\n\x1b[K\n\x1b[K\n\x1b[2F");
+    }
+
+    #[test]
+    fn a_taller_frame_needs_no_step_back() {
+        let update = repaint(&lines(&["a"]), &lines(&["x", "y"]), "\n");
+        assert_eq!(update, "\x1b[1Fx\x1b[K\ny\x1b[K\n");
+    }
+
+    #[test]
+    fn raw_mode_lines_carry_their_own_carriage_return() {
+        assert_eq!(repaint(&[], &lines(&["a"]), "\r\n"), "a\x1b[K\r\n");
+    }
+
+    #[test]
+    fn every_row_is_trimmed_so_longer_text_cannot_linger() {
+        let update = repaint(&lines(&["a long previous line"]), &lines(&["short"]), "\n");
+        assert!(update.contains("short\x1b[K"));
     }
 
     #[test]

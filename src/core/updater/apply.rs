@@ -8,7 +8,7 @@ use flate2::read::GzDecoder;
 
 use crate::core::updater::assets::find_current_asset;
 use crate::core::updater::check::check_for_update;
-use crate::core::updater::refresh::is_dev_build;
+use crate::core::updater::is_dev_build;
 use crate::core::version::{user_agent, BIN};
 
 /// Ceiling for the downloaded asset. Well above any real build, but bounded so
