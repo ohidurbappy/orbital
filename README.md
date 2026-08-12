@@ -53,6 +53,7 @@ regardless of its glibc version.
 
 ```sh
 orbital                  # interactive menu: type to fuzzy-search, ↑/↓ to move, Enter to run, Esc to quit
+orbital install          # copy this binary onto your PATH so `orbital` works anywhere
 orbital ip               # list local interface addresses
 orbital ip --local       # just the LAN IPv4, plain — e.g. IP=$(orbital ip --local)
 orbital ip --public      # your public IP (looked up via an external service)
@@ -71,6 +72,32 @@ orbital --version
 chrome, so they're safe to capture in scripts. Colour is dropped automatically when
 output isn't a terminal, and when `NO_COLOR` is set, so piping and redirecting only
 ever capture the command's own output.
+
+### install
+
+Already have the binary — built from source, or downloaded by hand — and want it on your PATH?
+
+```sh
+orbital install             # copy it to the default directory and put that on PATH
+orbital install --dry-run   # say what would happen, change nothing
+orbital install --dir ~/bin # install somewhere specific
+orbital install --no-path   # copy it, but leave PATH alone
+```
+
+It installs **for the current user only**, so it never needs a password or an elevated prompt.
+
+| Platform    | Default directory              | PATH                                              |
+| ----------- | ------------------------------ | ------------------------------------------------- |
+| Windows     | `%LOCALAPPDATA%\orbital\bin`   | appended to your user PATH, then open a new terminal |
+| macOS/Linux | `/usr/local/bin` if writable, else `~/.local/bin` | prints the line to add to your shell profile |
+
+`ORBITAL_INSTALL_DIR` works here exactly as it does for the install scripts. On Unix the command
+prints a shell-appropriate `export`/`fish_add_path` line rather than editing your profile: guessing
+the wrong rc file is a good way to break someone's login. On Windows it edits only
+`HKCU\Environment`, preserving the value's existing type and any `%VAR%` references in it.
+
+After installing it runs the installed copy once to confirm it actually executes, and warns if a
+different `orbital` earlier on your PATH would still win.
 
 ### table
 

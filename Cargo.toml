@@ -23,6 +23,17 @@ sysinfo = { version = "0.34.2", default-features = false, features = ["system"] 
 tiny_http = "0.12.0"
 ureq = { version = "3.2.1", features = ["json"] }
 
+# `orbital install` writes HKCU\Environment\Path directly, because every
+# higher-level route corrupts it: `setx` truncates at 1024 characters, and
+# .NET's SetEnvironmentVariable expands %VAR% on read and demotes the value to
+# REG_SZ. Already in the tree via if-addrs, so this adds no build cost.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Registry",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [profile.release]
 opt-level = "z"
 lto = true

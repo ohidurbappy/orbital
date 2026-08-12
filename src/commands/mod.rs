@@ -4,6 +4,7 @@
 //! interactive menu, and CLI dispatch.
 
 pub mod filter;
+pub mod install;
 pub mod ip;
 pub mod qr;
 pub mod serve;
@@ -85,6 +86,7 @@ pub struct Command {
 
 /// Every tool, in the order they appear in `--help` and the menu.
 pub static COMMANDS: &[Command] = &[
+    install::COMMAND,
     ip::COMMAND,
     qr::COMMAND,
     serve::COMMAND,

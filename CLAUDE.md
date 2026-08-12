@@ -30,10 +30,31 @@ It is written in Rust and ships as one self-contained executable per platform.
 - **Terminal:** `src/term.rs` owns raw mode (`RawMode` restores it on drop, and
   nests safely), key classification, and frame redrawing. `src/style.rs` owns ANSI
   colour, which turns itself off for non-terminals and `NO_COLOR`.
+- **Writing binaries:** `src/core/binfile.rs` owns `place_executable`, shared by `update` (replaces
+  the running binary) and `install` (writes a copy elsewhere). Never `fs::copy` an executable: it
+  carries alternate data streams and the read-only attribute on Windows, and xattrs including
+  `com.apple.quarantine` on macOS. Always stage a fresh file *in the destination directory* and
+  rename, so the swap is atomic and can't cross a filesystem.
 - **Update:** `src/core/updater/` runs only when the user asks. `orbital update`
   calls `apply`, which checks GitHub via `check` and self-replaces the binary.
   There is deliberately no background check, no cached state, and no banner —
   nothing touches the network unless the user ran `update`.
+
+## Platform-specific code
+
+- `src/commands/install/winenv.rs` holds the **only `unsafe` in the crate** — the
+  `HKCU\Environment` registry read/write and the `WM_SETTINGCHANGE` broadcast. Keep it free of
+  decisions: planning belongs in `install/plan.rs`, which is pure and testable on every OS.
+- Never write the Windows PATH with `setx` (truncates at 1024 characters) or with .NET's
+  `SetEnvironmentVariable` (expands `%VAR%` on read and demotes the value to `REG_SZ`, freezing the
+  machine PATH into the user's). Read the raw UTF-16, append, write it back with its `kind` intact.
+- Prefer a runtime `cfg!(windows)` branch over `#[cfg(windows)]` so both sides keep compiling
+  everywhere. CI runs `clippy -D warnings` on Linux, macOS *and* Windows, so an item reachable on
+  only one platform is a build failure on the others — either keep it reachable or annotate it
+  (`#[cfg_attr(not(windows), allow(dead_code))]`) and say why.
+- Build paths with the separator of the OS being *planned for*, not the host's: `Path::join` uses the
+  host separator, so `install/plan.rs` has its own `join` and the tests assert Windows layouts while
+  running on Linux.
 
 ## Conventions
 

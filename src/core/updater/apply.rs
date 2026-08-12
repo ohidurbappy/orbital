@@ -1,11 +1,10 @@
 //! Downloading a release asset and replacing the running binary with it.
 
-use std::fs;
 use std::io::Read;
-use std::path::{Path, PathBuf};
 
 use flate2::read::GzDecoder;
 
+use crate::core::binfile::place_executable;
 use crate::core::updater::assets::find_current_asset;
 use crate::core::updater::check::check_for_update;
 use crate::core::updater::is_dev_build;
@@ -168,43 +167,10 @@ fn download(url: &str) -> Result<Vec<u8>, String> {
     }
 }
 
-/// Write the new binary next to the current one and move it into place.
+/// Replace the running binary with `bytes`.
 fn install(bytes: &[u8]) -> Result<(), String> {
-    let target: PathBuf = std::env::current_exe().map_err(|e| format!("Update failed: {e}"))?;
-    let tmp = with_suffix(&target, ".new");
-
-    fs::write(&tmp, bytes).map_err(|e| format!("Update failed: {e}"))?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Update failed: {e}"))?;
-    }
-
-    if cfg!(windows) {
-        // Can't overwrite a running .exe; rename it aside, then move the new
-        // one in. The leftover .old is removed on the next update.
-        let old = with_suffix(&target, ".old");
-        let _ = fs::remove_file(&old);
-        fs::rename(&target, &old).map_err(|e| format!("Update failed: {e}"))?;
-        if let Err(err) = fs::rename(&tmp, &target) {
-            // Put the original back rather than leaving nothing on PATH.
-            let _ = fs::rename(&old, &target);
-            return Err(format!("Update failed: {err}"));
-        }
-    } else {
-        // Unix: replacing the file the process is executing is safe (inode swap).
-        fs::rename(&tmp, &target).map_err(|e| format!("Update failed: {e}"))?;
-    }
-
-    Ok(())
-}
-
-fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
-    let mut name = path.to_path_buf().into_os_string();
-    name.push(suffix);
-    PathBuf::from(name)
+    let target = std::env::current_exe().map_err(|e| format!("Update failed: {e}"))?;
+    place_executable(&target, bytes).map_err(|e| format!("Update failed: {e}"))
 }
 
 #[cfg(test)]
@@ -245,15 +211,6 @@ mod tests {
             total_bytes: None,
         });
         assert_eq!(label, "Downloading update…");
-    }
-
-    #[test]
-    fn suffixes_the_binary_path() {
-        let path = PathBuf::from("/usr/local/bin/orbital");
-        assert_eq!(
-            with_suffix(&path, ".new"),
-            PathBuf::from("/usr/local/bin/orbital.new")
-        );
     }
 
     #[test]
