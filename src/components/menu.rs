@@ -40,7 +40,11 @@ pub fn run_menu() -> Res {
     if !term::is_interactive() {
         // No TTY to prompt on: print what's available and leave, so
         // `orbital | cat` is still useful instead of hanging on a key read.
-        let mut lines = banner_lines(cached_update().as_ref());
+        let mut lines = if term::stdout_is_tty() {
+            banner_lines(cached_update().as_ref())
+        } else {
+            Vec::new()
+        };
         lines.push(style::bold_cyan("Available tools"));
         for command in COMMANDS {
             lines.push(format!(

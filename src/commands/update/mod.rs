@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::commands::{Command, Ctx};
+use crate::commands::{Command, Ctx, Stdin};
 use crate::core::updater::apply::{apply_update, progress_label, ApplyOutcome, Phase, Progress};
 use crate::style;
 use crate::term::{self, Frame};
@@ -16,7 +16,7 @@ pub const COMMAND: Command = Command {
     aliases: &["upgrade", "self-update"],
     run: None,
     view,
-    reads_stdin: false,
+    stdin: Stdin::Never,
 };
 
 /// Braille spinner frames, matching `ink-spinner`'s "dots".

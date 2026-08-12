@@ -4,7 +4,7 @@ pub mod addresses;
 
 use addresses::{local_ips, local_ipv4, parse_ip_flags, primary_ip, public_ip, IpEntry};
 
-use crate::commands::{Command, Ctx};
+use crate::commands::{Command, Ctx, Stdin};
 use crate::style;
 use crate::term;
 use crate::Res;
@@ -16,7 +16,7 @@ pub const COMMAND: Command = Command {
     // --local / --public print a plain address for scripting (no UI chrome).
     run: Some(run),
     view,
-    reads_stdin: false,
+    stdin: Stdin::Never,
 };
 
 fn run(ctx: &Ctx) -> Result<Option<String>, String> {

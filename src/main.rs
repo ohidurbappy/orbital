@@ -12,7 +12,7 @@ mod term;
 
 use std::io::{IsTerminal, Read};
 
-use commands::{find_command, Ctx, COMMANDS};
+use commands::{find_command, Ctx, Stdin, COMMANDS};
 use components::banner::banner_lines;
 use components::menu::run_menu;
 use core::updater::cached_update;
@@ -133,18 +133,21 @@ fn run() -> Res<i32> {
         }
     };
 
-    // Pull piped input for commands that want it. Only when no positional args
-    // were given (they take precedence, so there's nothing to wait for) and
-    // stdin isn't a TTY (an interactive `orbital qr` must not block on EOF).
-    let input =
-        if command.reads_stdin && parsed.command_args.is_empty() && !std::io::stdin().is_terminal()
-        {
-            let mut buffer = String::new();
-            std::io::stdin().read_to_string(&mut buffer)?;
-            Some(strip_bom(buffer))
-        } else {
-            None
-        };
+    // Pull piped input for commands that want it, and only when stdin isn't a
+    // TTY — an interactive `orbital qr` must not block waiting on EOF.
+    let wants_stdin = match command.stdin {
+        Stdin::Never => false,
+        // Arguments are the payload, so they take precedence over the pipe.
+        Stdin::WhenNoArgs => parsed.command_args.is_empty(),
+        Stdin::Always => true,
+    };
+    let input = if wants_stdin && !std::io::stdin().is_terminal() {
+        let mut buffer = String::new();
+        std::io::stdin().read_to_string(&mut buffer)?;
+        Some(strip_bom(buffer))
+    } else {
+        None
+    };
 
     let ctx = Ctx {
         args: &parsed.command_args,
@@ -169,9 +172,13 @@ fn run() -> Res<i32> {
         }
     }
 
-    let banner = banner_lines(cached_update().as_ref());
-    if !banner.is_empty() {
-        term::emit(&banner);
+    // The banner is chrome, not output: keep it out of pipes and files so
+    // `ps | orbital table > out.txt` captures only the table.
+    if term::stdout_is_tty() {
+        let banner = banner_lines(cached_update().as_ref());
+        if !banner.is_empty() {
+            term::emit(&banner);
+        }
     }
     (command.view)(&ctx)?;
 

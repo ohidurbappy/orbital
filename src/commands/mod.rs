@@ -8,6 +8,7 @@ pub mod ip;
 pub mod qr;
 pub mod serve;
 pub mod sysinfo;
+pub mod table;
 pub mod update;
 
 use crate::Res;
@@ -48,6 +49,20 @@ pub type RunFn = fn(&Ctx) -> Result<Option<String>, String>;
 /// input loop here and return when the user is done.
 pub type ViewFn = fn(&Ctx) -> Res;
 
+/// When a command wants the contents of a pipe. Piped stdin is only ever read
+/// when stdin is not a TTY, so an interactive run never blocks waiting on EOF.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stdin {
+    /// This command takes no piped input.
+    Never,
+    /// Read the pipe only when no arguments were given, because the arguments
+    /// *are* the payload — `orbital qr hello` must not wait on stdin.
+    WhenNoArgs,
+    /// Always read the pipe: the arguments are options, not data, so
+    /// `orbital table --csv` still gets its input.
+    Always,
+}
+
 /// A single tool in the orbital toolbox.
 ///
 /// To add a new command: create a module under `src/commands/<name>/`, expose a
@@ -63,10 +78,9 @@ pub struct Command {
     pub run: Option<RunFn>,
     /// The command's own rendering / interaction loop.
     pub view: ViewFn,
-    /// When true and stdin is piped (not a TTY), the one-shot runner reads it
-    /// fully and passes the contents as `Ctx::input`. Used by commands like
-    /// `qr` that accept their payload from a pipe.
-    pub reads_stdin: bool,
+    /// Whether the one-shot runner should read piped stdin and pass it as
+    /// `Ctx::input`.
+    pub stdin: Stdin,
 }
 
 /// Every tool, in the order they appear in `--help` and the menu.
@@ -75,6 +89,7 @@ pub static COMMANDS: &[Command] = &[
     qr::COMMAND,
     serve::COMMAND,
     sysinfo::COMMAND,
+    table::COMMAND,
     update::COMMAND,
 ];
 

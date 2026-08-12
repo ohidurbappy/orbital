@@ -98,7 +98,7 @@ mod tests {
             aliases,
             run: None,
             view: |_| Ok(()),
-            reads_stdin: false,
+            stdin: crate::commands::Stdin::Never,
         }
     }
 

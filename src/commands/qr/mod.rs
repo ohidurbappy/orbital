@@ -7,7 +7,7 @@ pub mod types;
 use encode::{resolve_qr_input, to_qr_lines};
 use types::{QrType, Values, QR_TYPES};
 
-use crate::commands::{Command, Ctx};
+use crate::commands::{Command, Ctx, Stdin};
 use crate::core::version::BIN;
 use crate::style;
 use crate::term::{self, Frame, Key, RawMode};
@@ -19,7 +19,7 @@ pub const COMMAND: Command = Command {
     aliases: &["qrcode"],
     run: None,
     view,
-    reads_stdin: true,
+    stdin: Stdin::WhenNoArgs,
 };
 
 /// Width of the label column while filling in fields.

@@ -45,6 +45,11 @@ It is written in Rust and ships as one self-contained executable per platform.
 - Interactive views must work when stdin/stdout aren't a terminal: check
   `Ctx::interactive` and fall back to printing a single frame (see `qr` and the
   menu), never block on a key read that can't come.
+- Only a command's own output goes to a pipe. Chrome (the update banner, colour)
+  is gated on `term::stdout_is_tty`, so `ps | orbital table > out.txt` captures
+  the table and nothing else.
+- Commands declare how they want piped input with `Stdin`: `WhenNoArgs` when the
+  arguments are the payload (`qr`), `Always` when they're options (`table`).
 - Asset names in `src/core/updater/assets.rs` must match the names produced by
   `.github/workflows/release.yml`. Release assets are **gzipped** (`<name>.gz`);
   the workflow gzips each binary and `apply_update` gunzips on download.

@@ -14,7 +14,7 @@ use files::{
 };
 
 use crate::commands::qr::encode::to_qr_lines;
-use crate::commands::{Command, Ctx};
+use crate::commands::{Command, Ctx, Stdin};
 use crate::style;
 use crate::term::{self, Key, RawMode};
 use crate::Res;
@@ -25,7 +25,7 @@ pub const COMMAND: Command = Command {
     aliases: &["http"],
     run: None,
     view,
-    reads_stdin: false,
+    stdin: Stdin::Never,
 };
 
 fn view(ctx: &Ctx) -> Res {

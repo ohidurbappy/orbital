@@ -11,9 +11,16 @@ use std::time::Duration;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::{cursor, queue, terminal};
 
+/// True when a human is watching stdout, rather than it being a pipe or file.
+/// Chrome that isn't part of a command's output — the update banner — is only
+/// worth drawing when this holds.
+pub fn stdout_is_tty() -> bool {
+    io::stdout().is_terminal()
+}
+
 /// True when we can both draw a UI and read keystrokes.
 pub fn is_interactive() -> bool {
-    io::stdin().is_terminal() && io::stdout().is_terminal()
+    io::stdin().is_terminal() && stdout_is_tty()
 }
 
 /// Enables raw mode for its lifetime and restores the terminal on drop —

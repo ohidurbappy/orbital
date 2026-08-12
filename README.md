@@ -61,14 +61,32 @@ echo "text" | orbital qr # …or pipe the payload in
 orbital serve            # serve the current directory over HTTP (default port 8000)
 orbital serve 8080       # …on a specific port; prints the LAN URL + a QR to scan
 orbital sysinfo          # neofetch-style system info
+ps aux | orbital table   # draw piped text as an aligned table
 orbital update           # download & install the latest release
 orbital --help
 orbital --version
 ```
 
 `orbital ip --local` (`-l`) and `--public` (`-p`) print a bare address with no UI
-chrome, so they're safe to capture in scripts. Colour is dropped automatically when
-output isn't a terminal, and when `NO_COLOR` is set.
+chrome, so they're safe to capture in scripts. Colour — and the update banner — are
+dropped automatically when output isn't a terminal, so piping and redirecting only
+ever capture the command's own output. `NO_COLOR` disables colour too.
+
+### table
+
+Reads delimited text from a pipe and prints it as a bordered, column-aligned table.
+Columns whose cells are all numeric are right-aligned; short rows are padded out.
+
+```sh
+docker ps | orbital table --header      # first row becomes column headings
+orbital table --csv < data.csv          # comma-separated, honouring "quoted, fields"
+orbital table --tsv < data.tsv          # tab-separated
+orbital table -d ';' < data.txt         # any single character ('\t' also accepted)
+orbital table --ascii                   # +--+ borders instead of box-drawing
+```
+
+Without a delimiter flag, lines are split on runs of whitespace — the same rule
+`awk` uses, which is what makes the output of most Unix tools line up.
 
 orbital checks GitHub for a newer release on startup (and every 10 minutes while the
 menu is open). When one is found it shows a banner; run `orbital update` to

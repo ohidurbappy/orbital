@@ -4,7 +4,7 @@ pub mod info;
 
 use info::{collect_system_info, real_raw, SystemInfo};
 
-use crate::commands::{Command, Ctx};
+use crate::commands::{Command, Ctx, Stdin};
 use crate::components::key_value::key_value;
 use crate::style;
 use crate::term;
@@ -16,7 +16,7 @@ pub const COMMAND: Command = Command {
     aliases: &["sys", "neofetch"],
     run: None,
     view,
-    reads_stdin: false,
+    stdin: Stdin::Never,
 };
 
 /// Small ASCII logos keyed by platform, neofetch-style.
