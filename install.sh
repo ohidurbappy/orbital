@@ -1,19 +1,19 @@
 #!/bin/sh
-# orb installer for macOS and Linux.
+# orbital installer for macOS and Linux.
 #
 # Downloads the latest release binary for your platform and installs it as
-# `orb` on your PATH. Usage:
+# `orbital` on your PATH. Usage:
 #
-#   curl -fsSL https://raw.githubusercontent.com/ohidurbappy/orb/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/ohidurbappy/orbital/main/install.sh | sh
 #
-# Override the install directory with ORB_INSTALL_DIR=/path sh install.sh
+# Override the install directory with ORBITAL_INSTALL_DIR=/path sh install.sh
 set -eu
 
-REPO="ohidurbappy/orb"
-BIN="orb"
+REPO="ohidurbappy/orbital"
+BIN="orbital"
 
 err() {
-  printf 'orb-install: error: %s\n' "$*" >&2
+  printf 'orbital-install: error: %s\n' "$*" >&2
   exit 1
 }
 
@@ -45,8 +45,8 @@ else
 fi
 
 # --- choose install directory ------------------------------------------------
-if [ -n "${ORB_INSTALL_DIR:-}" ]; then
-  dir="$ORB_INSTALL_DIR"
+if [ -n "${ORBITAL_INSTALL_DIR:-}" ]; then
+  dir="$ORBITAL_INSTALL_DIR"
 elif [ -w /usr/local/bin ]; then
   dir="/usr/local/bin"
 else
@@ -70,10 +70,10 @@ elif command -v sudo >/dev/null 2>&1; then
   printf 'Writing %s requires elevated permissions...\n' "$target"
   sudo mv "$tmp/$BIN" "$target" || err "failed to install to $target"
 else
-  err "cannot write to $target — set ORB_INSTALL_DIR to a writable directory"
+  err "cannot write to $target — set ORBITAL_INSTALL_DIR to a writable directory"
 fi
 
-printf '\nInstalled orb to %s\n' "$target"
+printf '\nInstalled orbital to %s\n' "$target"
 
 # --- PATH hint ---------------------------------------------------------------
 case ":$PATH:" in
@@ -84,4 +84,4 @@ case ":$PATH:" in
     ;;
 esac
 
-printf '\nRun: orb --help\n'
+printf '\nRun: orbital --help\n'

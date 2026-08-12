@@ -1,23 +1,23 @@
-# orb installer for Windows (PowerShell).
+# orbital installer for Windows (PowerShell).
 #
-# Downloads the latest release binary and installs it as `orb.exe`, adding it to
-# your user PATH. Usage:
+# Downloads the latest release binary and installs it as `orbital.exe`, adding
+# it to your user PATH. Usage:
 #
-#   irm https://raw.githubusercontent.com/ohidurbappy/orb/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/ohidurbappy/orbital/main/install.ps1 | iex
 #
-# Override the install directory with $env:ORB_INSTALL_DIR before running.
+# Override the install directory with $env:ORBITAL_INSTALL_DIR before running.
 $ErrorActionPreference = 'Stop'
 
-$repo = 'ohidurbappy/orb'
-$asset = 'orb-windows-x64.exe.gz'
+$repo = 'ohidurbappy/orbital'
+$asset = 'orbital-windows-x64.exe.gz'
 $url = "https://github.com/$repo/releases/latest/download/$asset"
 
 # --- choose install directory ------------------------------------------------
-$dir = if ($env:ORB_INSTALL_DIR) { $env:ORB_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'orb\bin' }
+$dir = if ($env:ORBITAL_INSTALL_DIR) { $env:ORBITAL_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'orbital\bin' }
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
-$gzPath = Join-Path $env:TEMP 'orb.exe.gz'
-$exePath = Join-Path $dir 'orb.exe'
+$gzPath = Join-Path $env:TEMP 'orbital.exe.gz'
+$exePath = Join-Path $dir 'orbital.exe'
 
 # --- download ----------------------------------------------------------------
 Write-Host "Downloading $asset ..."
@@ -35,14 +35,14 @@ try {
 Remove-Item $gzPath -ErrorAction SilentlyContinue
 
 Write-Host ""
-Write-Host "Installed orb to $exePath"
+Write-Host "Installed orbital to $exePath"
 
 # --- add to user PATH if missing ---------------------------------------------
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (($userPath -split ';') -notcontains $dir) {
   [Environment]::SetEnvironmentVariable('Path', "$userPath;$dir", 'User')
-  Write-Host "Added $dir to your user PATH — restart your terminal to use 'orb'."
+  Write-Host "Added $dir to your user PATH — restart your terminal to use 'orbital'."
 }
 
 Write-Host ""
-Write-Host "Run: orb --help"
+Write-Host "Run: orbital --help"

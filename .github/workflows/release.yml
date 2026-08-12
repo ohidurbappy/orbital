@@ -1,9 +1,9 @@
 name: Release
 
-# Every push to main cuts a release. The version is derived from package.json
+# Every push to main cuts a release. The version is derived from Cargo.toml
 # (MAJOR.MINOR) with the workflow run number as the patch, so each release is a
 # strictly-increasing semver without anyone bumping a file by hand. Bump
-# MAJOR/MINOR by editing the `version` field in package.json.
+# MAJOR/MINOR by editing the `version` field in Cargo.toml.
 on:
   push:
     branches:
@@ -17,39 +17,111 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  release:
+  # Sanity-gate the release on green tests, lints, and formatting.
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          bun-version: latest
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
 
-      - run: bun install --frozen-lockfile
-
-      # Sanity-gate the release on green tests + types.
-      - run: bun run typecheck
-      - run: bun test
-
-      # package.json holds MAJOR.MINOR(.PATCH); patch is replaced by the run
-      # number. The binary inlines package.json at build time (src/core/version.ts),
-      # so the compiled version always matches the release tag.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.version.outputs.full }}
+    steps:
+      - uses: actions/checkout@v4
       - name: Compute version
         id: version
         run: |
-          base="$(jq -r .version package.json)"
+          base="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
           major_minor="$(echo "$base" | cut -d. -f1,2)"
           full="${major_minor}.${GITHUB_RUN_NUMBER}"
-          jq --arg v "$full" '.version = $v' package.json > package.json.tmp
-          mv package.json.tmp package.json
           echo "full=$full" >> "$GITHUB_OUTPUT"
           echo "Releasing v$full"
 
-      # Bun cross-compiles every target from this one Linux runner and gzips
-      # each binary (see scripts/build.ts).
-      - name: Build all targets
-        run: bun run build
+  # One native runner per target: Rust needs a real linker (and, for rustls,
+  # a C toolchain) for each platform, so these can't all cross-compile from one
+  # box the way the Bun build did.
+  build:
+    needs: [check, version]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            asset: orbital-linux-x64
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            asset: orbital-linux-arm64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset: orbital-darwin-arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            asset: orbital-darwin-x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: orbital-windows-x64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # Static musl builds run on any distro, regardless of its glibc.
+      - name: Install musl tools
+        if: endsWith(matrix.target, '-linux-musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      # The binary reads its version from this (see src/core/version.rs), so the
+      # compiled version always matches the release tag.
+      - name: Build
+        env:
+          ORBITAL_VERSION: ${{ needs.version.outputs.full }}
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # Ship gzipped binaries: smaller downloads, and `apply_update` gunzips
+      # them. Asset names must match `asset_name_for` in
+      # src/core/updater/assets.rs.
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          src="target/${{ matrix.target }}/release/orbital"
+          [ -f "$src" ] || src="$src.exe"
+          gzip -9 -c "$src" > "dist/${{ matrix.asset }}.gz"
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}.gz
+          retention-days: 1
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Generate checksums
         working-directory: dist
@@ -58,7 +130,7 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: v${{ steps.version.outputs.full }}
+          TAG: v${{ needs.version.outputs.full }}
         run: |
           # Idempotent: a re-run reuses the run number (same tag), so refresh
           # assets instead of failing on an existing release.
