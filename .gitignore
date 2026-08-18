@@ -3,3 +3,5 @@ dist/
 *.log
 .DS_Store
 .claude/settings.local.json
+# Fetched by build.rs and embedded in the binary; 13.7 MB, never changes.
+model/

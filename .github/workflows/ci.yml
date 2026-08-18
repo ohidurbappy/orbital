@@ -22,6 +22,14 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
 
+      # The build embeds a 13.7 MB model that build.rs fetches once. The key is
+      # the blob's SHA-256, so a cache hit can never serve stale weights.
+      - name: Cache model weights
+        uses: actions/cache@v4
+        with:
+          path: model
+          key: needle2-b43aabfcaf1a6db6
+
       # Formatting and lints only need to be checked once.
       - name: Format
         if: matrix.os == 'ubuntu-latest'

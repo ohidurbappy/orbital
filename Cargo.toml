@@ -34,6 +34,11 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
+# The build script fetches and checksums the model weights that `orbital do`
+# embeds; it reuses the HTTP client already in the tree rather than adding one.
+[build-dependencies]
+ureq = "3.2.1"
+
 [profile.release]
 opt-level = "z"
 lto = true
