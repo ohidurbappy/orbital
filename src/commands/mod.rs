@@ -3,6 +3,9 @@
 //! Register a new command here and it automatically appears in `--help`, the
 //! interactive menu, and CLI dispatch.
 
+// `do` is a Rust keyword, so the module needs the raw identifier; the
+// command is still just `orbital do` on the CLI.
+pub mod r#do;
 pub mod filter;
 pub mod install;
 pub mod ip;
@@ -86,6 +89,7 @@ pub struct Command {
 
 /// Every tool, in the order they appear in `--help` and the menu.
 pub static COMMANDS: &[Command] = &[
+    r#do::COMMAND,
     install::COMMAND,
     ip::COMMAND,
     qr::COMMAND,

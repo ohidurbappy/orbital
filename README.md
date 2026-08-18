@@ -2,7 +2,8 @@
 
 A growable, cross-platform CLI toolbox — an aggregate of small tools that share one
 binary, one update mechanism, and one consistent UI. Written in Rust, shipped as a
-single dependency-free executable (~2 MB).
+single dependency-free executable (~15 MB, most of which is the 45M-parameter
+language model behind [`orbital do`](#do)).
 
 ## Install
 
@@ -53,6 +54,7 @@ regardless of its glibc version.
 
 ```sh
 orbital                  # interactive menu: type to fuzzy-search, ↑/↓ to move, Enter to run, Esc to quit
+orbital do show my ip    # say what you want in plain language; it picks the command
 orbital install          # copy this binary onto your PATH so `orbital` works anywhere
 orbital ip               # list local interface addresses
 orbital ip --local       # just the LAN IPv4, plain — e.g. IP=$(orbital ip --local)
@@ -72,6 +74,41 @@ orbital --version
 chrome, so they're safe to capture in scripts. Colour is dropped automatically when
 output isn't a terminal, and when `NO_COLOR` is set, so piping and redirecting only
 ever capture the command's own output.
+
+### do
+
+Describe what you want and `orbital` runs the matching command.
+
+```sh
+orbital do show a qr code for hello
+orbital do what is my public ip
+orbital do how much memory do i have
+orbital do serve this folder on port 9000
+echo "what os am i running" | orbital do
+
+orbital do -n "share this folder"   # --dry-run: print the command, don't run it
+orbital do -y "serve this folder"   # --yes: skip the confirmation for `serve`
+```
+
+It always prints the command it resolved to (`→ orbital qr hello`) before running
+it, so nothing happens that you can't see. `serve` publishes the working directory
+to your local network, so that one asks first unless you pass `--yes`.
+
+**No network, no API key, no account.** The request is handled by a 45M-parameter
+[Needle 2](https://github.com/cactus-compute/needle) model embedded in the binary,
+running on one thread on your machine — roughly three seconds end to end, most of
+it priming. Nothing is sent anywhere.
+
+The call is *grammar-constrained while it is being decoded*, not checked
+afterwards: a byte-level machine compiled from the tool schema restricts what the
+sampler may emit, so the command is always one that exists and its arguments are
+always the right type and shape. What the model can still get wrong is intent —
+"tell me a joke" resolves to a QR code of "a joke" — which is why the resolved
+command line is always shown.
+
+Four commands are reachable: `qr`, `ip`, `sysinfo` and `serve`. That is a hard
+ceiling, not a starting point — see [CLAUDE.md](./CLAUDE.md#the-four-tool-ceiling).
+Everything else you run by name.
 
 ### install
 
@@ -124,6 +161,9 @@ network traffic unless you ask for it.
 ## Development
 
 Requires a [Rust](https://rustup.rs) stable toolchain.
+
+The first build downloads the 13.7 MB model weights into `model/` (git-ignored)
+and checks them against their SHA-256; every build after that reuses the file.
 
 ```sh
 cargo run -- <args>    # run the CLI from source
