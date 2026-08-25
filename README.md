@@ -55,6 +55,8 @@ regardless of its glibc version.
 ```sh
 orbital                  # interactive menu: type to fuzzy-search, ↑/↓ to move, Enter to run, Esc to quit
 orbital do show my ip    # say what you want in plain language; it picks the command
+orbital ftp              # share the current directory over anonymous FTP (read-only, port 2121)
+orbital ftp --write      # …and allow uploads, deletes and renames
 orbital install          # copy this binary onto your PATH so `orbital` works anywhere
 orbital ip               # list local interface addresses
 orbital ip --local       # just the LAN IPv4, plain — e.g. IP=$(orbital ip --local)
@@ -109,6 +111,25 @@ command line is always shown.
 Four commands are reachable: `qr`, `ip`, `sysinfo` and `serve`. That is a hard
 ceiling, not a starting point — see [CLAUDE.md](./CLAUDE.md#the-four-tool-ceiling).
 Everything else you run by name.
+
+### ftp
+
+Shares the current directory as an anonymous FTP server: any username gets in and
+no password is asked. Handy for devices and apps that speak FTP but not HTTP —
+file managers, TVs, media players, microcontrollers.
+
+```sh
+orbital ftp                 # read-only, port 2121
+orbital ftp --write         # allow uploads, deletes, renames and new folders
+orbital ftp 2121            # pick the port (bare number, --port 2121, or -p 2121)
+```
+
+Read-only is the default, so nothing on the network can change your files unless
+you pass `--write` (`-w`). Every path is jailed to the shared directory, data
+connections are only accepted from the machine that owns the session, and both
+passive (PASV/EPSV) and active (PORT/EPRT) transfers are supported, so stock
+clients — FileZilla, `curl`, file managers — work out of the box. Plain FTP is
+unencrypted; use it on networks you trust.
 
 ### install
 
